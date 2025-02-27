@@ -1,28 +1,33 @@
 name: Lint
-# Lint runs golangci-lint over the entire Gaia repository
-# This workflow is run on every pull request and push to main
-# The `golangci` job will pass without running if no *.{go, mod, sum} files have been modified.
 on:
-  pull_request:
   push:
     branches:
       - main
+      - release/**
+      - feat/**
+  pull_request:
+permissions:
+  contents: read
 jobs:
   golangci:
     name: golangci-lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: technote-space/get-diff-action@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          check-latest: true
+      - uses: technote-space/get-diff-action@v6.1.2
+        id: git_diff
         with:
           PATTERNS: |
-            **/**.go
+            **/*.go
             go.mod
             go.sum
-      - uses: golangci/golangci-lint-action@v2
-        with:
-          # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
-          version: v1.42.1
-          args: --timeout 10m
-          github-token: ${{ secrets.github_token }}
-        if: "env.GIT_DIFF != ''"
+            **/go.mod
+            **/go.sum
+      - name: run linting
+        if: env.GIT_DIFF
+        run: |
+          make lint
