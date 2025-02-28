@@ -44,6 +44,7 @@ contain valid denominations. Accounts may optionally be supplied with vesting pa
 
 			config.SetRoot(clientCtx.HomeDir)
 
+			var kr keyring.Keyring
 			addr, err := sdk.AccAddressFromBech32(args[0])
 			if err != nil {
 				inBuf := bufio.NewReader(cmd.InOrStdin())
@@ -52,18 +53,25 @@ contain valid denominations. Accounts may optionally be supplied with vesting pa
 					return err
 				}
 
-				// attempt to lookup address from Keybase if no address was provided
-				kb, err := keyring.New(sdk.KeyringServiceName(), keyringBackend, clientCtx.HomeDir, inBuf)
-				if err != nil {
-					return err
+				if keyringBackend != "" && clientCtx.Keyring == nil {
+					var err error
+					kr, err = keyring.New(sdk.KeyringServiceName(), keyringBackend, clientCtx.HomeDir, inBuf, clientCtx.Codec)
+					if err != nil {
+						return err
+					}
+				} else {
+					kr = clientCtx.Keyring
 				}
 
-				info, err := kb.Key(args[0])
+				k, err := kr.Key(args[0])
 				if err != nil {
-					return fmt.Errorf("failed to get address from Keybase: %w", err)
+					return fmt.Errorf("failed to get address from Keyring: %w", err)
 				}
 
-				addr = info.GetAddress()
+				addr, err = k.GetAddress()
+				if err != nil {
+					return fmt.Errorf("failed to GetAddress() from Keyring: %w", err)
+				}
 			}
 
 			coins, err := sdk.ParseCoinsNormalized(args[1])
@@ -96,7 +104,10 @@ contain valid denominations. Accounts may optionally be supplied with vesting pa
 			baseAccount := authtypes.NewBaseAccount(addr, nil, 0, 0)
 
 			if !vestingAmt.IsZero() {
-				baseVestingAccount := authvesting.NewBaseVestingAccount(baseAccount, vestingAmt.Sort(), vestingEnd)
+				baseVestingAccount, err := authvesting.NewBaseVestingAccount(baseAccount, vestingAmt.Sort(), vestingEnd)
+				if err != nil {
+					return err
+				}
 
 				if (balances.Coins.IsZero() && !baseVestingAccount.OriginalVesting.IsZero()) ||
 					baseVestingAccount.OriginalVesting.IsAnyGT(balances.Coins) {
